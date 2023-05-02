@@ -1,0 +1,7 @@
+.vscode-ctags
+leak-*
+*.o
+1-uppercase
+2-linkedlist
+3-bracket-parser
+4-fibonacci

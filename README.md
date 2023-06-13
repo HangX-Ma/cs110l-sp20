@@ -8,7 +8,7 @@ There are five small assignments and two projects.
 - [x] [Week 2 Exercises: Ownership and structs](https://reberhardt.com/cs110l/spring-2020/assignments/week-2-exercises/)
 - [x] [Week 3 Exercises: Error handling, I/O, and traits](https://reberhardt.com/cs110l/spring-2020/assignments/week-3-exercises/)
 - [x] [Week 5 Exercises: Farm meets multithreading](https://reberhardt.com/cs110l/spring-2020/assignments/week-5-exercises/)
-- [ ] [Week 6 Exercises: Sharing Data by Communicating](https://reberhardt.com/cs110l/spring-2020/assignments/week-6-exercises/)
+- [x] [Week 6 Exercises: Sharing Data by Communicating](https://reberhardt.com/cs110l/spring-2020/assignments/week-6-exercises/)
 - [ ] [Project 1: The DEET Debugger](https://reberhardt.com/cs110l/spring-2020/assignments/project-1/)
 - [ ] [Project 2: Balancebeam](https://reberhardt.com/cs110l/spring-2020/assignments/project-2/)
 

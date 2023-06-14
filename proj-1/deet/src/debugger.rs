@@ -29,29 +29,56 @@ impl Debugger {
         }
     }
 
+    fn inferior_release_try(&mut self) {
+        if let Some(old_inferior) = self.inferior.as_mut() {
+            old_inferior.kill();
+        }
+    }
+
+    fn inferior_continue_exec(&mut self) {
+        if let Some(inferior) = self.inferior.as_mut() {
+            match inferior.continue_exec() {
+                Ok(status) => match status {
+                    Status::Stopped(sig, ptr) => println!("Child process stopped due to signal {} at pointer {:#x}", sig, ptr),
+                    Status::Signaled(sig) => println!("Child process exited due to signal {}", sig),
+                    Status::Exited(ret) => println!("Child process exited (status {})", ret),
+                },
+                Err(err) => print!("Child process encounters an error {}", err),
+            }
+        } else {
+            println!("No inferior found");
+        }
+    }
+
     pub fn run(&mut self) {
         loop {
             match self.get_next_command() {
                 DebuggerCommand::Run(args) => {
+                    // kill the previous inferior if it exists
+                    self.inferior_release_try();
+
+                    // Create new inferior
                     if let Some(inferior) = Inferior::new(&self.target, &args) {
                         // Create the inferior
                         self.inferior = Some(inferior);
                         // You may use self.inferior.as_mut().unwrap() to get a mutable reference
                         // to the Inferior object
-                        match self.inferior.as_mut().unwrap().continue_exec() {
-                            Ok(status) => match status {
-                                Status::Stopped(sig, ptr) => println!("Child process stopped due to signal {} at pointer {:#x}", sig, ptr),
-                                Status::Signaled(sig) => println!("Child process exited due to signal {}", sig),
-                                Status::Exited(ret) => println!("Child process exited (status {})", ret),
-                            },
-                            Err(err) => print!("Child process encounters an error {}", err),
-                        }
+                        self.inferior_continue_exec();
                     } else {
                         println!("Error starting subprocess");
                     }
                 }
                 DebuggerCommand::Quit => {
+                    self.inferior_release_try();
                     return;
+                },
+                DebuggerCommand::Continue => {
+                    if let Some(_) = self.inferior.as_mut() {
+                        self.inferior_continue_exec();
+                    } else {
+                        // press 'c' before 'r'
+                        println!("No process running error")
+                    }
                 }
             }
         }

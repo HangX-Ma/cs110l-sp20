@@ -73,4 +73,12 @@ impl Inferior {
             other => panic!("waitpid returned unexpected status: {:?}", other),
         })
     }
+
+    pub fn kill(&mut self) {
+        println!("Killing running inferior (pid {})", self.pid());
+        match self.child.try_wait() {
+            Ok(None) => self.child.kill().expect("Child has already exited before you call 'kill'"),
+            _ => (), // child has exited or no child need to wait
+        }
+    }
 }

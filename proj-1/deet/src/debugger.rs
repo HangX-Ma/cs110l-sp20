@@ -3,18 +3,33 @@ use crate::inferior::{Inferior, Status};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use rustyline::history::FileHistory;
+use nix::sys::ptrace;
+// debugging symbols
+use crate::dwarf_data::{DwarfData, Error as DwarfError};
 
 pub struct Debugger {
     target: String,
     history_path: String,
     readline: Editor<(), FileHistory>,
     inferior: Option<Inferior>,
+    debug_data: DwarfData,
 }
 
 impl Debugger {
     /// Initializes the debugger.
     pub fn new(target: &str) -> Debugger {
         // TODO (milestone 3): initialize the DwarfData
+        let debug_data = match DwarfData::from_file(target) {
+            Ok(val) => val,
+            Err(DwarfError::ErrorOpeningFile) => {
+                println!("Could not open file {}", target);
+                std::process::exit(1);
+            }
+            Err(DwarfError::DwarfFormatError(err)) => {
+                println!("Could not debugging symbols from {}: {:?}", target, err);
+                std::process::exit(1);
+            }
+        };
 
         let history_path = format!("{}/.deet_history", std::env::var("HOME").unwrap());
         let mut readline = Editor::<(), FileHistory>::new().expect("Create Editor fail");
@@ -26,6 +41,7 @@ impl Debugger {
             history_path,
             readline,
             inferior: None,
+            debug_data,
         }
     }
 
@@ -39,14 +55,26 @@ impl Debugger {
         if let Some(inferior) = self.inferior.as_mut() {
             match inferior.continue_exec() {
                 Ok(status) => match status {
-                    Status::Stopped(sig, ptr) => println!("Child process stopped due to signal {} at pointer {:#x}", sig, ptr),
-                    Status::Signaled(sig) => println!("Child process exited due to signal {}", sig),
-                    Status::Exited(ret) => println!("Child process exited (status {})", ret),
+                    Status::Stopped(sig, ptr) => println!("Child stopped (signal {}, address {:#x})", sig, ptr),
+                    Status::Signaled(sig) => println!("Child exited (signal {})", sig),
+                    Status::Exited(ret) => println!("Child exited (status {})", ret),
                 },
-                Err(err) => print!("Child process encounters an error {}", err),
+                Err(err) => print!("Child error ({})", err),
             }
         } else {
             println!("No inferior found");
+        }
+    }
+
+    fn print_backtrace(&mut self) -> Result<(), nix::Error> {
+        // Starter code: Ok(println!("Hello world"))
+        if let Some(inferior) = self.inferior.as_mut() {
+            let regs = ptrace::getregs(inferior.pid()).unwrap();
+            let line_t = DwarfData::get_line_from_addr(&self.debug_data, regs.rip as usize).unwrap();
+            let func_name = DwarfData::get_function_from_addr(&self.debug_data, regs.rip as usize).unwrap();
+            Ok(println!("{} ({})", func_name, line_t))
+        } else {
+            Err(nix::Error::ECHILD)
         }
     }
 
@@ -79,6 +107,9 @@ impl Debugger {
                         // press 'c' before 'r'
                         println!("No process running error")
                     }
+                },
+                DebuggerCommand::Backtrace => {
+                    self.print_backtrace().expect("Nothing");
                 }
             }
         }

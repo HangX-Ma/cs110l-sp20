@@ -6,6 +6,14 @@ use rustyline::history::FileHistory;
 use nix::sys::ptrace;
 // debugging symbols
 use crate::dwarf_data::{DwarfData, Error as DwarfError};
+use std::collections::HashMap;
+
+#[derive(Clone)]
+pub struct Breakpoint {
+    pub addr: usize,
+    pub orig_byte: u8,
+}
+
 
 pub struct Debugger {
     target: String,
@@ -13,7 +21,7 @@ pub struct Debugger {
     readline: Editor<(), FileHistory>,
     inferior: Option<Inferior>,
     debug_data: DwarfData,
-    breakpoints: Vec<usize>,
+    breakpoints: HashMap<usize, Option<Breakpoint>>,
 }
 
 impl Debugger {
@@ -44,7 +52,7 @@ impl Debugger {
             readline,
             inferior: None,
             debug_data,
-            breakpoints: Vec::new(),
+            breakpoints: HashMap::new(),
         }
     }
 
@@ -54,12 +62,9 @@ impl Debugger {
         }
     }
 
-    fn inferior_continue_exec(&mut self) {
+    fn inferior_continue_exec(&mut self, breakpoints: &HashMap<usize, Option<Breakpoint>>) {
         if let Some(inferior) = self.inferior.as_mut() {
-            for addr in &self.breakpoints {
-                inferior.write_byte(*addr as usize, 0xcc as u8).unwrap();
-            }
-            match inferior.continue_exec() {
+            match inferior.continue_exec(breakpoints) {
                 Ok(status) => match status {
                     Status::Stopped(sig, ptr) => {
                         println!("Child stopped (signal {}, address {:#x})", sig, ptr);
@@ -117,12 +122,12 @@ impl Debugger {
                     self.inferior_release_try();
 
                     // Create new inferior
-                    if let Some(inferior) = Inferior::new(&self.target, &args) {
+                    if let Some(inferior) = Inferior::new(&self.target, &args, &mut self.breakpoints) {
                         // Create the inferior
                         self.inferior = Some(inferior);
                         // You may use self.inferior.as_mut().unwrap() to get a mutable reference
                         // to the Inferior object
-                        self.inferior_continue_exec();
+                        self.inferior_continue_exec(&self.breakpoints.clone());
                     } else {
                         println!("Error starting subprocess");
                     }
@@ -133,7 +138,7 @@ impl Debugger {
                 },
                 DebuggerCommand::Continue => {
                     if let Some(_) = self.inferior.as_mut() {
-                        self.inferior_continue_exec();
+                        self.inferior_continue_exec(&self.breakpoints.clone());
                     } else {
                         // press 'c' before 'r'
                         println!("No process running error")
@@ -145,9 +150,27 @@ impl Debugger {
                 DebuggerCommand::Breakpoint(addr_wrapper) => {
                     match addr_wrapper {
                         Some(addr) => {
+                            // parse the addr string which has no prefix symbol '*'
                             if let Some(parsed_addr) = self.parse_address(addr.as_str()) {
-                                self.breakpoints.push(parsed_addr);
+                                // set breakpoints if inferior exists
+                                if let Some(inferior) = self.inferior.as_mut() {
+                                    match inferior.write_byte(parsed_addr, 0xcc as u8) {
+                                        Ok(orig_byte) => {
+                                            self.breakpoints.insert(
+                                                parsed_addr, 
+                                                Some(Breakpoint{
+                                                    addr: parsed_addr,
+                                                    orig_byte: orig_byte
+                                                }));
+                                        },
+                                        Err(err) => println!("Inferior::write_byte for breakpoint error {}", err),
+                                    }
+                                } else {
+                                    self.breakpoints.insert(parsed_addr, None);
+                                }
                                 println!("Set breakpoint {} at {:#x}", self.breakpoints.len() - 1, parsed_addr);
+                            } else {
+                                println!("fail to parse a usize from a hexadecimal string");
                             }
                         },
                         _ => ()

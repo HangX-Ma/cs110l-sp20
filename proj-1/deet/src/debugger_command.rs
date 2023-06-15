@@ -20,12 +20,9 @@ impl DebuggerCommand {
             "bt" | "back" | "backtrace" => Some(DebuggerCommand::Backtrace),
             "b" | "break" | "breakpoint" => {
                 if tokens.len() >= 2 {
-                    let addr = tokens[1].to_string();
-                    if addr.len() >= 2 && addr.chars().nth(0).unwrap() == "*".to_string().chars().nth(0).unwrap() {
-                        return Some(DebuggerCommand::Breakpoint(Some(addr[1..].to_string())))
-                    }
+                    let target = tokens[1].to_string();
+                    return Some(DebuggerCommand::Breakpoint(Some(target.to_string())))
                 }
-                println!("Usage: b|break|breakpoint *address");
                 // command length not satisfy the requirement
                 Some(DebuggerCommand::Breakpoint(None))
             }

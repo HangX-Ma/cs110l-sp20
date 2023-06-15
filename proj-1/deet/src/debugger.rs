@@ -147,33 +147,46 @@ impl Debugger {
                 DebuggerCommand::Backtrace => {
                     self.print_backtrace().expect("Nothing");
                 },
-                DebuggerCommand::Breakpoint(addr_wrapper) => {
-                    match addr_wrapper {
-                        Some(addr) => {
-                            // parse the addr string which has no prefix symbol '*'
-                            if let Some(parsed_addr) = self.parse_address(addr.as_str()) {
-                                // set breakpoints if inferior exists
-                                if let Some(inferior) = self.inferior.as_mut() {
-                                    match inferior.write_byte(parsed_addr, 0xcc as u8) {
-                                        Ok(orig_byte) => {
-                                            self.breakpoints.insert(
-                                                parsed_addr, 
-                                                Some(Breakpoint{
-                                                    addr: parsed_addr,
-                                                    orig_byte: orig_byte
-                                                }));
-                                        },
-                                        Err(err) => println!("Inferior::write_byte for breakpoint error {}", err),
-                                    }
-                                } else {
-                                    self.breakpoints.insert(parsed_addr, None);
-                                }
-                                println!("Set breakpoint {} at {:#x}", self.breakpoints.len() - 1, parsed_addr);
+                DebuggerCommand::Breakpoint(target_wrapper) => {
+                    if let Some(tg) = target_wrapper {
+                        let addr: Option<usize>;
+                        if tg.starts_with('*') {
+                            addr = self.parse_address(&tg[1..]); 
+                        } else {
+                            // parse as the line number
+                            if tg.chars().into_iter().all(|c| c.is_numeric()) {
+                                let line_number = tg.parse::<usize>().unwrap();
+                                addr = DwarfData::get_addr_for_line(&self.debug_data, None, line_number);
                             } else {
-                                println!("fail to parse a usize from a hexadecimal string");
+                                // treat the target as the function name
+                                let func_name = &tg;
+                                addr = DwarfData::get_addr_for_function(&self.debug_data, None, func_name);
                             }
-                        },
-                        _ => ()
+                        }
+                        
+                        if let Some(parsed_addr) = addr {
+                            // parse the addr string which has no prefix symbol '*'
+                            // set breakpoints if inferior exists
+                            if let Some(inferior) = self.inferior.as_mut() {
+                                match inferior.write_byte(parsed_addr, 0xcc as u8) {
+                                    Ok(orig_byte) => {
+                                        self.breakpoints.insert(
+                                            parsed_addr, 
+                                            Some(Breakpoint{
+                                                addr: parsed_addr,
+                                                orig_byte: orig_byte
+                                            }));
+                                    },
+                                    Err(err) => println!("Inferior::write_byte for breakpoint error {}", err),
+                                }
+                            } else {
+                                self.breakpoints.insert(parsed_addr, None);
+                            }
+                            println!("Set breakpoint {} at {:#x}", self.breakpoints.len() - 1, parsed_addr);
+                        } else {
+                            println!("fail to parse a usize from a hexadecimal string");
+                            return;
+                        }
                     }
                 }
             }

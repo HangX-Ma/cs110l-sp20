@@ -70,9 +70,19 @@ impl Debugger {
         // Starter code: Ok(println!("Hello world"))
         if let Some(inferior) = self.inferior.as_mut() {
             let regs = ptrace::getregs(inferior.pid()).unwrap();
-            let line_t = DwarfData::get_line_from_addr(&self.debug_data, regs.rip as usize).unwrap();
-            let func_name = DwarfData::get_function_from_addr(&self.debug_data, regs.rip as usize).unwrap();
-            Ok(println!("{} ({})", func_name, line_t))
+            let mut instruction_ptr = regs.rip;
+            let mut base_ptr = regs.rbp;
+            loop {
+                let line_t = DwarfData::get_line_from_addr(&self.debug_data, instruction_ptr as usize).unwrap();
+                let func_name = DwarfData::get_function_from_addr(&self.debug_data, instruction_ptr as usize).unwrap();
+                println!("{} ({})", func_name, line_t);
+                if func_name == "main".to_string() {
+                    break;
+                }
+                instruction_ptr = ptrace::read(inferior.pid(), (base_ptr + 8) as ptrace::AddressType)? as u64;
+                base_ptr = ptrace::read(inferior.pid(), base_ptr as ptrace::AddressType)? as u64;
+            }
+            Ok(())
         } else {
             Err(nix::Error::ECHILD)
         }

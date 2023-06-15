@@ -4,6 +4,7 @@ use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 use nix::unistd::Pid;
 use std::process::{Child, Command};
 use std::os::unix::process::CommandExt;
+use std::mem::size_of;
 
 pub enum Status {
     /// Indicates inferior stopped. Contains the signal that stopped the process, as well as the
@@ -25,6 +26,10 @@ fn child_traceme() -> Result<(), std::io::Error> {
         std::io::ErrorKind::Other,
         "ptrace TRACEME failed",
     )))
+}
+
+fn align_addr_to_word(addr: usize) -> usize {
+    addr & (-(size_of::<usize>() as isize) as usize)
 }
 
 pub struct Inferior {
@@ -81,4 +86,22 @@ impl Inferior {
             _ => (), // child has exited or no child need to wait
         }
     }
+
+    pub fn write_byte(&mut self, addr: usize, val: u8) -> Result<u8, nix::Error> {
+        let aligned_addr = align_addr_to_word(addr);
+        let byte_offset = addr - aligned_addr;
+        let word = ptrace::read(self.pid(), aligned_addr as ptrace::AddressType)? as u64;
+        let orig_byte = (word >> 8 * byte_offset) & 0xff;
+        let masked_word = word & !(0xff << 8 * byte_offset);
+        let updated_word = masked_word | ((val as u64) << 8 * byte_offset);
+        unsafe {
+            ptrace::write(
+                self.pid(),
+                aligned_addr as ptrace::AddressType,
+                updated_word as *mut std::ffi::c_void,
+            )?;
+        }
+        Ok(orig_byte as u8)
+    }
+
 }

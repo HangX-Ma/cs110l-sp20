@@ -13,6 +13,7 @@ pub struct Debugger {
     readline: Editor<(), FileHistory>,
     inferior: Option<Inferior>,
     debug_data: DwarfData,
+    breakpoints: Vec<usize>,
 }
 
 impl Debugger {
@@ -30,6 +31,7 @@ impl Debugger {
                 std::process::exit(1);
             }
         };
+        debug_data.print();
 
         let history_path = format!("{}/.deet_history", std::env::var("HOME").unwrap());
         let mut readline = Editor::<(), FileHistory>::new().expect("Create Editor fail");
@@ -42,6 +44,7 @@ impl Debugger {
             readline,
             inferior: None,
             debug_data,
+            breakpoints: Vec::new(),
         }
     }
 
@@ -53,6 +56,9 @@ impl Debugger {
 
     fn inferior_continue_exec(&mut self) {
         if let Some(inferior) = self.inferior.as_mut() {
+            for addr in &self.breakpoints {
+                inferior.write_byte(*addr as usize, 0xcc as u8).unwrap();
+            }
             match inferior.continue_exec() {
                 Ok(status) => match status {
                     Status::Stopped(sig, ptr) => {
@@ -94,6 +100,15 @@ impl Debugger {
         }
     }
 
+    pub fn parse_address(&mut self, addr: &str) -> Option<usize> {
+        let addr_without_0x = if addr.to_lowercase().starts_with("0x") {
+            &addr[2..]
+        } else {
+            &addr
+        };
+        usize::from_str_radix(addr_without_0x, 16).ok()
+    }
+
     pub fn run(&mut self) {
         loop {
             match self.get_next_command() {
@@ -126,6 +141,17 @@ impl Debugger {
                 },
                 DebuggerCommand::Backtrace => {
                     self.print_backtrace().expect("Nothing");
+                },
+                DebuggerCommand::Breakpoint(addr_wrapper) => {
+                    match addr_wrapper {
+                        Some(addr) => {
+                            if let Some(parsed_addr) = self.parse_address(addr.as_str()) {
+                                self.breakpoints.push(parsed_addr);
+                                println!("Set breakpoint {} at {:#x}", self.breakpoints.len() - 1, parsed_addr);
+                            }
+                        },
+                        _ => ()
+                    }
                 }
             }
         }

@@ -55,7 +55,13 @@ impl Debugger {
         if let Some(inferior) = self.inferior.as_mut() {
             match inferior.continue_exec() {
                 Ok(status) => match status {
-                    Status::Stopped(sig, ptr) => println!("Child stopped (signal {}, address {:#x})", sig, ptr),
+                    Status::Stopped(sig, ptr) => {
+                        println!("Child stopped (signal {}, address {:#x})", sig, ptr);
+                        let regs = ptrace::getregs(inferior.pid()).unwrap();
+                        let line_t = DwarfData::get_line_from_addr(&self.debug_data, regs.rip as usize).unwrap();
+                        let func_name = DwarfData::get_function_from_addr(&self.debug_data, regs.rip as usize).unwrap();
+                        println!("Stopped at {} ({})", func_name, line_t);
+                    },
                     Status::Signaled(sig) => println!("Child exited (signal {})", sig),
                     Status::Exited(ret) => println!("Child exited (status {})", ret),
                 },

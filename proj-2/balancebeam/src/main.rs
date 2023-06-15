@@ -1,12 +1,9 @@
 mod request;
 mod response;
-use clap::Parser;
 
-#[allow(unused)]
-use rand::{Rng, SeedableRng, distributions};
+use clap::Parser;
+use rand::{Rng, SeedableRng};
 use std::net::{TcpListener, TcpStream};
-// student modification
-use std::{thread};
 
 /// Contains information parsed from the command-line invocation of balancebeam. The Clap macros
 /// provide a fancy way to automatically construct a command-line argument parser.
@@ -48,17 +45,6 @@ struct ProxyState {
     upstream_addresses: Vec<String>,
 }
 
-impl Clone for ProxyState {
-    fn clone(&self) -> Self {
-        Self {
-            active_health_check_interval: self.active_health_check_interval,
-            active_health_check_path: self.active_health_check_path.clone(),
-            max_requests_per_minute: self.max_requests_per_minute,
-            upstream_addresses: self.upstream_addresses.clone(),
-        }
-    }
-}
-
 fn main() {
     // Initialize the logging library. You can print log messages using the `log` macros:
     // https://docs.rs/log/0.4.8/log/ You are welcome to continue using print! statements; this
@@ -92,23 +78,11 @@ fn main() {
         active_health_check_path: options.active_health_check_path,
         max_requests_per_minute: options.max_requests_per_minute,
     };
-
-    let mut threads = Vec::new();
-    for _ in 0..num_cpus::get() {
-        let listener_ref = listener.try_clone().unwrap();
-        let state_ref = state.clone();
-        threads.push(thread::spawn(move || {
-            for stream in listener_ref.incoming() {
-                if let Ok(stream) = stream {
-                    // Handle the connection!
-                    handle_connection(stream, &state_ref);
-                }
-            }
-        }));
-    }
-
-    for handle in threads {
-        handle.join().expect("Panic occurred in thread!");
+    for stream in listener.incoming() {
+        if let Ok(stream) = stream {
+            // Handle the connection!
+            handle_connection(stream, &state);
+        }
     }
 }
 
@@ -154,7 +128,7 @@ fn handle_connection(mut client_conn: TcpStream, state: &ProxyState) {
     // The client may now send us one or more requests. Keep trying to read requests until the
     // client hangs up or we get an error.
     loop {
-        // 2. Read a request from the client
+        // Read a request from the client
         let mut request = match request::read_from_stream(&mut client_conn) {
             Ok(request) => request,
             // Handle case where client closed connection and is no longer sending requests
@@ -188,12 +162,12 @@ fn handle_connection(mut client_conn: TcpStream, state: &ProxyState) {
             request::format_request_line(&request)
         );
 
-        // 3. Add X-Forwarded-For header so that the upstream server knows the client's IP address.
+        // Add X-Forwarded-For header so that the upstream server knows the client's IP address.
         // (We're the ones connecting directly to the upstream server, so without this header, the
         // upstream server will only know our IP, not the client's.)
         request::extend_header_value(&mut request, "x-forwarded-for", &client_ip);
 
-        // 4. Forward the request to the server
+        // Forward the request to the server
         if let Err(error) = request::write_to_stream(&request, &mut upstream_conn) {
             let response = response::make_http_error(http::StatusCode::BAD_GATEWAY);
             log::error!(
@@ -206,7 +180,7 @@ fn handle_connection(mut client_conn: TcpStream, state: &ProxyState) {
         }
         log::debug!("Forwarded request to server");
 
-        // 5. Read the server's response
+        // Read the server's response
         let response = match response::read_from_stream(&mut upstream_conn, request.method()) {
             Ok(response) => response,
             Err(error) => {
@@ -216,7 +190,7 @@ fn handle_connection(mut client_conn: TcpStream, state: &ProxyState) {
                 return;
             }
         };
-        // 6. Forward the response to the client
+        // Forward the response to the client
         send_response(&mut client_conn, &response);
         log::debug!("Forwarded response to client");
     }

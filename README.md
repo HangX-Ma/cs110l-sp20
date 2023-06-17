@@ -10,7 +10,7 @@ There are five small assignments and two projects.
 - [x] [Week 5 Exercises: Farm meets multithreading](https://reberhardt.com/cs110l/spring-2020/assignments/week-5-exercises/)
 - [x] [Week 6 Exercises: Sharing Data by Communicating](https://reberhardt.com/cs110l/spring-2020/assignments/week-6-exercises/)
 - [x] [Project 1: The DEET Debugger](https://reberhardt.com/cs110l/spring-2020/assignments/project-1/)
-- [ ] [Project 2: Balancebeam](https://reberhardt.com/cs110l/spring-2020/assignments/project-2/)
+- [x] [Project 2: Balancebeam](https://reberhardt.com/cs110l/spring-2020/assignments/project-2/)
 
 ## License
 
